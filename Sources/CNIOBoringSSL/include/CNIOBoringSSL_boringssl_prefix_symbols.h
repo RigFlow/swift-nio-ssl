@@ -4959,3 +4959,4 @@
 #define ssl_ech_keys_st BORINGSSL_ADD_PREFIX(BORINGSSL_PREFIX, ssl_ech_keys_st)
 #define ssl_session_st BORINGSSL_ADD_PREFIX(BORINGSSL_PREFIX, ssl_session_st)
 #define ssl_st BORINGSSL_ADD_PREFIX(BORINGSSL_PREFIX, ssl_st)
+#define p_thread_callback_boringssl BORINGSSL_ADD_PREFIX(BORINGSSL_PREFIX, p_thread_callback_boringssl)

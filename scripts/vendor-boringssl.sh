@@ -137,6 +137,11 @@ function mangle_symbols {
     echo "ADDING symbol mangling"
     perl -pi -e '$_ .= qq(\n#define BORINGSSL_PREFIX CNIOBoringSSL\n) if /#define OPENSSL_HEADER_BASE_H/' "$DSTROOT/include/openssl/base.h"
 
+    # x86 Windows builds need nasm for BoringSSL's assembly, which SwiftPM
+    # can't run, so disable it there (as swift-crypto does).
+    echo "DISABLING assembly on x86 Windows"
+    perl -pi -e '$_ .= qq(#if defined(_WIN32) && (defined(__x86_64) || defined(_M_AMD64) || defined(_M_X64) || defined(__x86) || defined(__i386) || defined(__i386__) || defined(_M_IX86))\n#define OPENSSL_NO_ASM\n#endif\n) if /#define BORINGSSL_PREFIX CNIOBoringSSL/' "$DSTROOT/include/openssl/base.h"
+
     while IFS= read -r -d '' assembly_file
     do
         $sed -i '1 i #define BORINGSSL_PREFIX CNIOBoringSSL' "$assembly_file"
@@ -172,6 +177,13 @@ function mangle_cpp_structures {
 
         for struct in ${structures}; do
             echo "#define ${struct} BORINGSSL_ADD_PREFIX(BORINGSSL_PREFIX, ${struct})" >> "${DSTROOT}/include/CNIOBoringSSL_boringssl_prefix_symbols.h"
+        done
+
+        # Symbols only defined in Windows builds never show up in the nm
+        # output above, but still collide with other BoringSSL copies (such
+        # as swift-crypto's) linked into the same Windows binary.
+        for symbol in p_thread_callback_boringssl; do
+            echo "#define ${symbol} BORINGSSL_ADD_PREFIX(BORINGSSL_PREFIX, ${symbol})" >> "${DSTROOT}/include/CNIOBoringSSL_boringssl_prefix_symbols.h"
         done
 
         # Remove the product, as we no longer need it.

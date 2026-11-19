@@ -30,6 +30,9 @@ import Musl
 import Glibc
 #elseif canImport(Android)
 import Android
+#elseif os(Windows)
+import ucrt
+import WinSDK
 #else
 #error("unsupported os")
 #endif
@@ -41,12 +44,38 @@ internal typealias FILEPointer = UnsafeMutablePointer<FILE>
 #endif
 
 private let sysFopen = fopen
-private let sysMlock = mlock
-private let sysMunlock = munlock
 private let sysFclose = fclose
 private let sysStat = { @Sendable in stat($0, $1) }
+#if os(Windows)
+// Windows has no mlock: VirtualLock is the counterpart, and it reports
+// failure through GetLastError rather than errno, so set errno to keep
+// wrapSyscall's contract.
+private let sysMlock: @Sendable (UnsafeRawPointer?, Int) -> CInt = { addr, len in
+    if VirtualLock(UnsafeMutableRawPointer(mutating: addr), SIZE_T(len)) { return 0 }
+    _set_errno(ENOMEM)
+    return -1
+}
+private let sysMunlock: @Sendable (UnsafeRawPointer?, Int) -> CInt = { addr, len in
+    if VirtualUnlock(UnsafeMutableRawPointer(mutating: addr), SIZE_T(len)) { return 0 }
+    _set_errno(EINVAL)
+    return -1
+}
+// No symbolic links in the POSIX sense to tell apart, so lstat is stat.
+private let sysLstat = sysStat
+
+private var sysErrno: CInt {
+    var value: CInt = 0
+    _get_errno(&value)
+    return value
+}
+#else
+private let sysMlock = mlock
+private let sysMunlock = munlock
 private let sysLstat = lstat
 private let sysReadlink = readlink
+
+private var sysErrno: CInt { errno }
+#endif
 
 // MARK:- Copied code from SwiftNIO
 private func isUnacceptableErrno(_ code: CInt) -> Bool {
@@ -65,7 +94,7 @@ internal func wrapSyscall<T: FixedWidthInteger>(where function: String = #functi
     while true {
         let res = try body()
         if res == -1 {
-            let err = errno
+            let err = sysErrno
             if err == EINTR {
                 continue
             }
@@ -84,7 +113,7 @@ internal func wrapErrorIsNullReturnCall<T>(
 ) throws -> T {
     while true {
         guard let res = try body() else {
-            let err = errno
+            let err = sysErrno
             if err == EINTR {
                 continue
             }
@@ -113,6 +142,7 @@ internal enum Posix {
         }
     }
 
+    #if !os(Windows)
     @inline(never)
     internal static func readlink(
         path: UnsafePointer<Int8>,
@@ -123,6 +153,7 @@ internal enum Posix {
             sysReadlink(path, buf, bufSize)
         }
     }
+    #endif
 
     @inline(never)
     @discardableResult

@@ -1189,7 +1189,7 @@ class TLSConfigurationTest: XCTestCase {
 
         // We now sleep a short time to let everything catch up and the runtime catch any exclusivity violation.
         // 10ms is fine.
-        usleep(10_000)
+        Thread.sleep(forTimeInterval: 0.01)
 
         // Great, signal the sempahore twice to un-wedge everything and wait for everything to exit.
         semaphore.signal()

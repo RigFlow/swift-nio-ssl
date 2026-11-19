@@ -24,6 +24,9 @@ import Musl
 import Glibc
 #elseif canImport(Android)
 import Android
+#elseif os(Windows)
+import ucrt
+import WinSDK
 #else
 #error("unsupported os")
 #endif
@@ -66,6 +69,9 @@ internal enum FileSystemObject {
 
         #if os(Android) && arch(arm)
         return (statObj.st_mode & UInt32(S_IFDIR)) != 0 ? .directory : .file
+        #elseif os(Windows)
+        // The CRT's st_mode is an unsigned short; its S_IF* constants are int.
+        return (statObj.st_mode & UInt16(_S_IFDIR)) != 0 ? .directory : .file
         #else
         return (statObj.st_mode & S_IFDIR) != 0 ? .directory : .file
         #endif
@@ -816,6 +822,14 @@ extension NIOSSLContext {
             fileExtension.allSatisfy({ $0.isDecimalDigit })
         else { return false }
 
+        #if os(Windows)
+        // The CRT's stat can't report a symlink; on Windows a symbolic link
+        // is a reparse point.
+        let attributes = path.withCString { GetFileAttributesA($0) }
+        if attributes == INVALID_FILE_ATTRIBUTES { throw NIOSSLError.noSuchFilesystemObject }
+        if attributes & DWORD(FILE_ATTRIBUTE_REPARSE_POINT) == 0 { return false }
+        return true
+        #else
         // Check if the element is a symlink. If it is not, return false.
         var buffer = stat()
         let _ = try Posix.lstat(path: path, buf: &buffer)
@@ -830,6 +844,7 @@ extension NIOSSLContext {
         // Rehash format being "%08x.%s%d" with an empty infix, or HHHHHHHH.D where D is one or
         // more decimal digits.
         return true
+        #endif
     }
 }
 
@@ -948,6 +963,39 @@ internal class DirectoryContents: Sequence, IteratorProtocol {
     let path: String
     // Used to account between the differences of DIR being defined on Darwin.
     // Otherwise an OpaquePointer needs to be used to account for the non-defined type in glibc.
+    #if os(Windows)
+    // No dirent: FindFirstFile/FindNextFile, holding the entry the search
+    // handle is already on until next() hands it out.
+    let handle: HANDLE?
+    var pending: WIN32_FIND_DATAA?
+
+    init(path: String) {
+        self.path = path
+        var data = WIN32_FIND_DATAA()
+        let found = (path + "*").withCString { FindFirstFileA($0, &data) }
+        if let found, found != INVALID_HANDLE_VALUE {
+            self.handle = found
+            self.pending = data
+        } else {
+            self.handle = nil
+            self.pending = nil
+        }
+    }
+
+    func next() -> String? {
+        guard var data = self.pending, let handle = self.handle else { return nil }
+        let name = withUnsafePointer(to: &data.cFileName) { ptr in
+            String(cString: UnsafeRawPointer(ptr).assumingMemoryBound(to: CChar.self))
+        }
+        var nextData = WIN32_FIND_DATAA()
+        self.pending = FindNextFileA(handle, &nextData) ? nextData : nil
+        return self.path + name
+    }
+
+    deinit {
+        if let handle = self.handle { FindClose(handle) }
+    }
+    #else
     #if canImport(Darwin)
     let dir: UnsafeMutablePointer<DIR>
     #else
@@ -975,6 +1023,7 @@ internal class DirectoryContents: Sequence, IteratorProtocol {
     deinit {
         closedir(dir)
     }
+    #endif
 }
 
 // Used as part of the `_isRehashFormat` format to determine whether the filename is a hexadecimal

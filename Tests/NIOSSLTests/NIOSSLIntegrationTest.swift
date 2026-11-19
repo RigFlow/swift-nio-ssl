@@ -426,7 +426,7 @@ internal func serverTLSChannel(
 ) throws -> Channel {
     try assertNoThrowWithValue(
         ServerBootstrap(group: group)
-            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
                 channel.eventLoop.makeCompletedFuture {
                     try channel.pipeline.syncOperations.addHandlers(preHandlers())
@@ -688,7 +688,7 @@ class NIOSSLIntegrationTest: XCTestCase {
 
     static func keyInFile(key: NIOSSLPrivateKey, passphrase: String) throws -> String {
         let fileName = try makeTemporaryFile(fileExtension: ".pem")
-        let tempFile = open(fileName, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0o644)
+        let tempFile = open(fileName, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, testFileMode)
         precondition(tempFile > 1, String(cString: strerror(errno)))
         let fileBio = CNIOBoringSSL_BIO_new_fp(fdopen(tempFile, "w+"), BIO_CLOSE)
         precondition(fileBio != nil)
@@ -719,7 +719,7 @@ class NIOSSLIntegrationTest: XCTestCase {
             fatalError("couldn't make temp file")
         }
         let tempFile = fileName.withCString { ptr in
-            open(ptr, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0o644)
+            open(ptr, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, testFileMode)
         }
         precondition(tempFile > 1, String(cString: strerror(errno)))
         let fileBio = CNIOBoringSSL_BIO_new_fp(fdopen(tempFile, "w+"), BIO_CLOSE)
@@ -872,6 +872,7 @@ class NIOSSLIntegrationTest: XCTestCase {
     }
 
     func testSubsequentWritesFailAfterCloseModeOutput() throws {
+        try skipHalfClosureOnWindows()
         let context = try configuredSSLContext()
 
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
@@ -883,7 +884,7 @@ class NIOSSLIntegrationTest: XCTestCase {
 
         let serverChannel: Channel = try ServerBootstrap(group: group)
             .childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)  // Important!
-            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
                 channel.eventLoop.makeCompletedFuture {
                     try channel.pipeline.syncOperations.addHandlers(
@@ -922,6 +923,7 @@ class NIOSSLIntegrationTest: XCTestCase {
     }
 
     func testCloseModeOutputServerAndClient() throws {
+        try skipHalfClosureOnWindows()
         let context = try configuredSSLContext()
 
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
@@ -934,7 +936,7 @@ class NIOSSLIntegrationTest: XCTestCase {
 
         let serverChannel: Channel = try ServerBootstrap(group: group)
             .childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)  // Important!
-            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
                 channel.eventLoop.makeCompletedFuture {
                     try channel.pipeline.syncOperations.addHandlers(
@@ -1052,7 +1054,7 @@ class NIOSSLIntegrationTest: XCTestCase {
         let childChannelPromise: EventLoopPromise<Channel> = group.next().makePromise()
         let serverChannel: Channel = try ServerBootstrap(group: group)
             .childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)  // Important!
-            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
                 childChannelPromise.succeed(channel)
                 return channel.eventLoop.makeCompletedFuture {
@@ -1184,6 +1186,7 @@ class NIOSSLIntegrationTest: XCTestCase {
     }
 
     func testCloseModeOutputTriggersFlush() throws {
+        try skipHalfClosureOnWindows()
         let context = try configuredSSLContext()
 
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
@@ -1195,7 +1198,7 @@ class NIOSSLIntegrationTest: XCTestCase {
 
         let serverChannel: Channel = try ServerBootstrap(group: group)
             .childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)  // Important!
-            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
                 channel.eventLoop.makeCompletedFuture {
                     try channel.pipeline.syncOperations.addHandlers(
@@ -1234,6 +1237,7 @@ class NIOSSLIntegrationTest: XCTestCase {
     }
 
     func testMultipleCloseOutput() throws {
+        try skipHalfClosureOnWindows()
         let context = try configuredSSLContext()
 
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
@@ -1245,7 +1249,7 @@ class NIOSSLIntegrationTest: XCTestCase {
 
         let serverChannel: Channel = try ServerBootstrap(group: group)
             .childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)  // Important!
-            .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
                 channel.eventLoop.makeCompletedFuture {
                     try channel.pipeline.syncOperations.addHandlers(
@@ -1767,7 +1771,7 @@ class NIOSSLIntegrationTest: XCTestCase {
 
         let serverChannel = try assertNoThrowWithValue(
             ServerBootstrap(group: group)
-                .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+                .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
                 .childChannelInitializer { channel in
                     channel.eventLoop.makeCompletedFuture {
                         let handler = NIOSSLServerHandler._makeSSLServerHandler(
@@ -1839,7 +1843,7 @@ class NIOSSLIntegrationTest: XCTestCase {
 
         let serverChannel = try assertNoThrowWithValue(
             ServerBootstrap(group: group)
-                .serverChannelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+                .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
                 .childChannelInitializer { channel in
                     channel.eventLoop.makeCompletedFuture {
                         let handler = NIOSSLServerHandler._makeSSLServerHandler(
@@ -3329,7 +3333,7 @@ class NIOSSLIntegrationTest: XCTestCase {
             let range = NSRange(location: 0, length: errorString.utf16.count)
             let regex = try! NSRegularExpression(
                 pattern:
-                    "sslError\\(\\[Error\\: 268435703 error\\:100000f7\\:SSL routines\\:OPENSSL_internal\\:WRONG_VERSION_NUMBER at .*\\/[A-Za-z_]+\\.cc\\:[0-9]+\\]\\)"
+                    "sslError\\(\\[Error\\: 268435703 error\\:100000f7\\:SSL routines\\:OPENSSL_internal\\:WRONG_VERSION_NUMBER at .*[\\/\\\\][A-Za-z_]+\\.cc\\:[0-9]+\\]\\)"
             )
             XCTAssertNotNil(regex.firstMatch(in: errorString, options: [], range: range))
         }

@@ -24,6 +24,9 @@ import Musl
 import Glibc
 #elseif canImport(Android)
 import Android
+#elseif os(Windows)
+import ucrt
+import WinSDK
 #else
 #error("unsupported os")
 #endif
@@ -223,7 +226,7 @@ extension _SubjectAlternativeName.IPAddress: CustomStringConvertible {
         var address = address
         var dest: [CChar] = Array(repeating: 0, count: Self.ipv4AddressLength)
         dest.withUnsafeMutableBufferPointer { pointer in
-            let result = inet_ntop(AF_INET, &address, pointer.baseAddress!, socklen_t(pointer.count))
+            let result = inet_ntop(AF_INET, &address, pointer.baseAddress!, inetNtopSize(pointer.count))
             precondition(
                 result != nil,
                 "The IP address was invalid. This should never happen as we're within the IP address struct."
@@ -236,7 +239,7 @@ extension _SubjectAlternativeName.IPAddress: CustomStringConvertible {
         var address = address
         var dest: [CChar] = Array(repeating: 0, count: Self.ipv6AddressLength)
         dest.withUnsafeMutableBufferPointer { pointer in
-            let result = inet_ntop(AF_INET6, &address, pointer.baseAddress!, socklen_t(pointer.count))
+            let result = inet_ntop(AF_INET6, &address, pointer.baseAddress!, inetNtopSize(pointer.count))
             precondition(
                 result != nil,
                 "The IP address was invalid. This should never happen as we're within the IP address struct."
@@ -245,3 +248,10 @@ extension _SubjectAlternativeName.IPAddress: CustomStringConvertible {
         return String(cString: &dest)
     }
 }
+
+// inet_ntop's buffer size is a socklen_t on POSIX and a size_t on Windows.
+#if os(Windows)
+private func inetNtopSize(_ count: Int) -> Int { count }
+#else
+private func inetNtopSize(_ count: Int) -> socklen_t { socklen_t(count) }
+#endif

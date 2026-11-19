@@ -19,8 +19,27 @@ import NIOCore
 import NIOEmbedded
 import SwiftASN1
 import X509
+import XCTest
 
 @testable import NIOSSL
+
+#if os(Windows)
+// The CRT's counterpart of O_CLOEXEC: don't let child processes inherit it.
+let O_CLOEXEC: CInt = _O_NOINHERIT
+// The CRT's open only takes _S_IREAD/_S_IWRITE, and any other permission
+// bit is an invalid parameter, which terminates the process.
+let testFileMode: CInt = _S_IREAD | _S_IWRITE
+#else
+let testFileMode: mode_t = 0o644
+#endif
+
+/// swift-nio's WSAPoll selector reports a peer's FIN (POLLHUP) as a reset,
+/// so TCP half-closure isn't supported on Windows.
+func skipHalfClosureOnWindows() throws {
+    #if os(Windows)
+    throw XCTSkip("swift-nio doesn't support TCP half-closure on Windows")
+    #endif
+}
 
 let samplePemCert = """
     -----BEGIN CERTIFICATE-----
@@ -487,6 +506,11 @@ func pemToDer(_ pem: String) -> Data {
 // In the future we should just use getentropy and be happy.
 func randomSerialNumber() -> ASN1_INTEGER {
     let bytesToRead = 20
+    #if os(Windows)
+    // No /dev/urandom; the system generator is BCryptGenRandom.
+    var generator = SystemRandomNumberGenerator()
+    var readBytes = (0..<bytesToRead).map { _ in UInt8.random(in: .min ... .max, using: &generator) }
+    #else
     let fd = open("/dev/urandom", O_RDONLY)
     precondition(fd != -1)
     defer {
@@ -498,6 +522,7 @@ func randomSerialNumber() -> ASN1_INTEGER {
         read(fd, $0.baseAddress, bytesToRead)
     }
     precondition(readCount == bytesToRead)
+    #endif
 
     // Our 20-byte number needs to be converted into an integer. This is
     // too big for Swift's numbers, but BoringSSL can handle it fine.

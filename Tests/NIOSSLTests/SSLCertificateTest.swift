@@ -18,6 +18,10 @@ import XCTest
 
 @testable import NIOSSL
 
+#if os(Windows)
+import WinSDK
+#endif
+
 let multiSanCert = """
     -----BEGIN CERTIFICATE-----
     MIIDEzCCAfugAwIBAgIURiMaUmhI1Xr0mZ4p+JmI0XjZTaIwDQYJKoZIhvcNAQEL
@@ -171,6 +175,15 @@ func makeTemporaryFile(fileExtension: String = "", customPath: String = "") thro
         try FileManager.default.createDirectory(at: URL(fileURLWithPath: path), withIntermediateDirectories: true)
         template = "\(FileManager.default.temporaryDirectory.path)/\(customPath)/niotestXXXXXXX\(fileExtension)"
     }
+    #if os(Windows)
+    // No mkstemps (and the CRT's _open is variadic, so not callable from
+    // Swift): fill in the X's from a UUID, which won't collide, and create
+    // the file empty.
+    let unique = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(7)
+    let path = template.replacingOccurrences(of: "XXXXXXX", with: String(unique))
+    precondition(FileManager.default.createFile(atPath: path, contents: nil), "couldn't create \(path)")
+    return path
+    #else
     var templateBytes = template.utf8 + [0]
     let fd = templateBytes.withUnsafeMutableBufferPointer { ptr in
         ptr.baseAddress!.withMemoryRebound(to: Int8.self, capacity: ptr.count) { (ptr: UnsafeMutablePointer<Int8>) in
@@ -180,6 +193,7 @@ func makeTemporaryFile(fileExtension: String = "", customPath: String = "") thro
     close(fd)
     templateBytes.removeLast()
     return String(decoding: templateBytes, as: UTF8.self)
+    #endif
 }
 
 internal func dumpToFile(data: Data, fileExtension: String = "", customPath: String = "") throws -> String {
