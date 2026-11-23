@@ -32,7 +32,11 @@ import PackageDescription
 func generateDependencies() -> [Package.Dependency] {
     if Context.environment["SWIFTCI_USE_LOCAL_DEPS"] == nil {
         return [
-            .package(url: "https://github.com/apple/swift-nio.git", from: "2.98.0"),
+            // RigFlow's swift-nio fork (2.103.0 plus Windows fixes), the
+            // one Pulse depends on: naming apple/swift-nio here too gives
+            // SwiftPM two locations for one identity, which it warns is
+            // to become an error.
+            .package(url: "https://github.com/RigFlow/swift-nio.git", revision: "259cf064a0b7a6b7b45d3a6a8f2b1232a1a4ddc6"),
             .package(url: "https://github.com/apple/swift-certificates.git", from: "1.19.4"),
         ]
     } else {
