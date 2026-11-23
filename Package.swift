@@ -36,7 +36,7 @@ func generateDependencies() -> [Package.Dependency] {
             // one Pulse depends on: naming apple/swift-nio here too gives
             // SwiftPM two locations for one identity, which it warns is
             // to become an error.
-            .package(url: "https://github.com/RigFlow/swift-nio.git", revision: "259cf064a0b7a6b7b45d3a6a8f2b1232a1a4ddc6"),
+            .package(url: "https://github.com/RigFlow/swift-nio.git", revision: "33e4d1a4b9240122cb895a0eef2f886be3970775"),
             .package(url: "https://github.com/apple/swift-certificates.git", from: "1.19.4"),
         ]
     } else {
